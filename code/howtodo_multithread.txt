@@ -1,0 +1,3 @@
+1. Create a looping threadproc(WinFunction). This will stay dormant
+until it is asked to do some work. Fit the threadproc into multiple
+threads
