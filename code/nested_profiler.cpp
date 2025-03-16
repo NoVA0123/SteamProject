@@ -6,12 +6,7 @@
    $Notice: (C) Copyright 2025 by Abhijit Rai. All Rights Reserved. $
    ================================================================= */
 
-#include <cstddef>
-#include <stdio.h>
-#include "typedef.h"
-#include "platform_metrics.h"
 
-// TODO(Abhijit): Create a struct that contains start time and end time.
 struct profile {
     u64 StartCounter; 
     u64 TotalClocks;

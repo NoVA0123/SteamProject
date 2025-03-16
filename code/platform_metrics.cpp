@@ -1,16 +1,25 @@
 /* Copyright[2024] Abhijit Rai */
 #include <stdint.h>
+#include "typedef.h"
 typedef uint64_t u64;
 
 
-#if _WIN64
+#if _WIN32
 
 
 #include <intrin.h>
 #include <windows.h>
 #include <profileapi.h>
 #include <winnt.h>
+#include <psapi.h>
 
+
+struct os_metrics {
+    bool Initialized;
+    HANDLE ProcessHandle;
+};
+
+static os_metrics GlobalMetrics;
 
 static u64 get_os_time_freq(void) {
     LARGE_INTEGER freq;
@@ -24,6 +33,26 @@ static u64 read_os_timer(void) {
     return Value.QuadPart;
 }
 
+static u64 ReadOsPageFaultCount(void) {
+    PROCESS_MEMORY_COUNTERS_EX MemoryCounters = {};
+    MemoryCounters.cb = sizeof(MemoryCounters);
+    GetProcessMemoryInfo(
+            GlobalMetrics.ProcessHandle,
+            (PROCESS_MEMORY_COUNTERS*)&MemoryCounters,
+            sizeof(MemoryCounters));
+    u64 Result = MemoryCounters.PageFaultCount;
+    return Result;
+}
+
+static void InitializeOsMetrics(void) {
+    if (!GlobalMetrics.Initialized) {
+        GlobalMetrics.Initialized = true;
+        GlobalMetrics.ProcessHandle = OpenProcess(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                FALSE,
+                GetCurrentProcessId());
+    }
+}
 
 #else
 

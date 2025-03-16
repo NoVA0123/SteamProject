@@ -12,46 +12,62 @@
 #include <windows.h>
 #include <winbase.h>
 #include <processthreadsapi.h>
-#include "platform_metrics.cpp"
-#include "nested_profiler.cpp"
 #include "typedef.h"
+#include "csv_parser.h"
 
-struct stat file_size(char *pfileName) {
+struct stat FileSize(char *pfileName) {
     struct stat Stat;
     stat(pfileName, &Stat);
     return Stat;
 }
 
-struct thread_info {
-    struct games *table;
-    u32 SizeArray;
-    char * buffer;
-    u32 * location;
-    u32 WorkStartIndex;
-    u32 division_size;
-    u8 extra;
-};
-
-struct GameColumns{
-    u32 id;
-    char name[32];
-    char release_date[16];
-    u8 is_free;
-    char type[8];
-};
-
-struct games{
-    struct GameColumns  * Data;
-    char Column[5][13];
-    // [TotalCols][10]
-};
-
-u32 find_values_from_buffer(
+struct csv_info * GPTFindValuesFromBuffer(
         char * buffer,
         u32 * Values,
-        u64 size) {
+        u64 size,
+        csv_info * GameInfo) {
     u32 Counter = 0;
     u8 CsvEscape = 0;
+    u8 LineFeed = 0;
+    for (u32 i = 0; i < size; i++) {
+        if (buffer[i] == '"') {  /* 92 = \ */
+            if (i == 0 || buffer[i-1] != '\\') {
+                CsvEscape = !CsvEscape;
+            }
+        }
+        if (!CsvEscape && (buffer[i] == ',' || buffer[i] == '\n')) {
+            if (buffer[i] == '\n') {
+                LineFeed = Counter;
+            }
+            Counter++;
+        }
+    }
+
+    Counter = 0;
+    for (u32 i = 0; i < size; i++) {
+        if (buffer[i] == '"') {  /* 92 = \ */
+            if (i == 0 || buffer[i-1] != '\\') {
+                CsvEscape = !CsvEscape;
+            }
+        }
+        if (!CsvEscape && (buffer[i] == ',' || buffer[i] == '\n')) {
+            Values[Counter] = i;
+            Counter++;
+        }
+    }
+    GameInfo -> uSizeArray = Counter;
+    GameInfo -> ubFirstLineFeed = LineFeed;
+    return GameInfo;
+}
+
+struct csv_info * FindValuesFromBuffer(
+        char * buffer,
+        u32 * Values,
+        u64 size,
+        csv_info * GameInfo) {
+    u32 Counter = 0;
+    u8 CsvEscape = 0;
+    u8 LineFeed = 0;
     for (u32 i = 0; i < size; i++) {
         if (buffer[i] == 92) {  /* 92 = \ */
             i++;
@@ -64,16 +80,42 @@ u32 find_values_from_buffer(
         if ((!(buffer[i] - ',')) | (!(buffer[i] - '\n'))) {
             Values[Counter] = i;
             Counter += 1;
+            if (!(buffer[i] - '\n')) {
+                LineFeed = Counter;
+                break;
+            }
         }
     }
-    return Counter;
+    Counter = 0;
+    u8 TmpBool;
+    for (u32 i = 0; i < size; i++) {
+        /*92 = \\*/
+        if (buffer[i] == 92) {
+            i++;
+            continue;
+        }
+        //i += 1 << (buffer[i] == 92);
+        CsvEscape = CsvEscape ^ (buffer[i] == '"');
+        //i += CsvEscape;
+        if (CsvEscape) {
+            continue;
+        }
+        TmpBool = !CsvEscape & (buffer[i] == ',' | buffer[i] == '\n');
+        if (TmpBool) {
+            Values[Counter] = i;
+            Counter += 1;
+        }
+    }
+    GameInfo -> uSizeArray = Counter;
+    GameInfo -> ubFirstLineFeed = LineFeed;
+    return GameInfo;
 }
 
-static inline void load_string(
+void CopyString(
         u32 location1,
         u32 location2,
         char * buffer,
-        u8 max,
+        u16 max,
         char * values) {
     if (location1 >= location2) {
         values[0] = '"';
@@ -81,17 +123,17 @@ static inline void load_string(
         values[2] = '\0';
         return;
     }
-    u16 length = location2 - location1;
+    u32 length = location2 - location1;
     length = length*(max > length) + max*(max <= length);
-    for (u8 i=0; i < length; i++) {
+    for (u32 i=0; i < length; i++) {
         values[i] = *buffer++;
     }
     values[length] = '\0';
 }
 
-static inline u32 fast_atoi(const char * str) {
+static inline u32 FastAtoi(const char * str) {
     u32 val = 0;
-    if (*str >= 'N') {
+    if (*str >= '9') {
         return 0;
     }
     while (*str > '"') {
@@ -100,7 +142,7 @@ static inline u32 fast_atoi(const char * str) {
     return val;
 }
 
-void game_parse(
+void GamesParseSingleThread(
         struct games *table,
         u32 SizeArray,
         char * buffer,
@@ -109,155 +151,422 @@ void game_parse(
     char * location1 = 0;
     char * location2 = 0;
     for (u32 x = 6; x < SizeArray; x += 7) {
-        location1 = &buffer[location[x] + 2];
-        table->Data[Counter].id = fast_atoi(location1);
-        load_string(
+        // location1 = &buffer[location[x] + 2];
+        location1 = buffer + (location[x] + 2);
+        table->Data[Counter].uID = FastAtoi(location1);
+        CopyString(
                 location[x+1] + 2,
                 location[x+2] - 1,
-                &buffer[location[x+1] + 2],
-                sizeof(table->Data[Counter].name),
-                table->Data[Counter].name);
-        load_string(
+                // &buffer[location[x+1] + 2],
+                buffer + (location[x+1] + 2),
+                sizeof(table->Data[Counter].sName),
+                table->Data[Counter].sName);
+        CopyString(
                 location[x+2] + 2,
                 location[x+3] - 1,
-                &buffer[location[x+2] + 2],
-                sizeof(table->Data[Counter].release_date),
-                table->Data[Counter].release_date);
-        location2 = &buffer[location[x] + 3];
-        table->Data[Counter].is_free = (u8) fast_atoi(location2);
-        load_string(
+                // &buffer[location[x+2] + 2],
+                buffer + (location[x+2] + 2),
+                sizeof(table->Data[Counter].sReleaseDate),
+                table->Data[Counter].sReleaseDate);
+        // location2 = &buffer[location[x] + 3];
+        location2 = buffer + (location[x] + 3);
+        table->Data[Counter].ubIsFree = (u8) FastAtoi(location2);
+        CopyString(
                 location[x+6] + 2,
                 location[x+7] - 1,
-                &buffer[location[x+2] + 2],
-                sizeof(table->Data[Counter].type),
-                table->Data[Counter].type);
+                // &buffer[location[x+2] + 2],
+                buffer + (location[x+2] + 6),
+                sizeof(table->Data[Counter].sType),
+                table->Data[Counter].sType);
 
         Counter++;
     }
-    for (u32 x = 0; x < 1; x++) {
-        load_string(
-                1,
-                location[x] - 1,
-                &buffer[1],
-                sizeof(table->Column[0]),
-                table->Column[0]);
-        load_string(
-                location[x] + 2,
-                location[x+1] - 1,
-                &buffer[location[x] + 2],
-                sizeof(table->Column[1]),
-                table->Column[1]);
-        load_string(
+}
+
+void CategoryParseSingleThread(
+        struct category *table,
+        u32 SizeArray,
+        char * buffer,
+        u32 * location) {
+    char * location1 = 0;
+    u32 Counter = 0;
+    for (u32 x = 2; x < SizeArray; x += 3) {
+        location1 = buffer + (location[x] + 2);
+        table->Data[Counter].uID = FastAtoi(location1);
+        CopyString(
                 location[x+1] + 2,
                 location[x+2] - 1,
-                &buffer[location[x+1] + 2],
-                sizeof(table->Column[2]),
-                table->Column[2]);
-        load_string(
-                location[x+2] + 2,
-                location[x+3] - 1,
-                &buffer[location[x+2] + 2],
-                sizeof(table->Column[3]),
-                table->Column[3]);
-        load_string(
-                location[x+5] + 2,
-                location[x+6] - 1,
-                &buffer[location[x+5] + 2],
-                sizeof(table->Column[4]),
-                table->Column[4]);
+                // &buffer[location[x+1] + 2],
+                buffer + (location[x+1] + 2),
+                sizeof(table->Data[Counter].sCategory),
+                table->Data[Counter].sCategory);
+        Counter++;
     }
 }
 
-void thread_info_find(
-        games * table,
-        u32 SizeArray,
+void ThreadInitializer(
+        void * table,
         char * buffer,
         u32 * locations,
         u8 TotalThreads,
-        thread_info * Info
+        thread_info * Info,
+        csv_info * GameInfo
         ) {
-    u32 division_size = SizeArray / TotalThreads;
-    u8 extra = SizeArray - (division_size * TotalThreads);
+    u32 SizeArray = GameInfo -> uSizeArray;
+    u32 BaseSize = (SizeArray - GameInfo -> ubFirstLineFeed) /
+        GameInfo -> ubFirstLineFeed;
+    u32 StepSize = BaseSize / TotalThreads;
+    u32 Extra = BaseSize - (StepSize * TotalThreads);
+
     for (u8 x = 0; x < TotalThreads; x++) {
-        Info[x].SizeArray = SizeArray;
         Info[x].table = table;
-        Info[x].buffer = buffer;
-        Info[x].location = locations;
-        Info[x].WorkStartIndex = division_size + division_size * x;
-        Info[x].division_size = division_size;
+        Info[x].uSizeArray = SizeArray;
+        Info[x].caBuffer = buffer;
+        Info[x].uaLocation = locations;
+        Info[x].uStepSize = StepSize;
+        Info[x].ThreadIndex = x;
+        Info[x].ubFirstLineFeed = GameInfo -> ubFirstLineFeed;
+        Info[x].Extra = 0;
     }
-    Info[TotalThreads-1].extra = extra;
+    Info[TotalThreads - 1].Extra = Extra;
 }
-void game_parse_multithread(
-        thread_info * Info) {
-    u32 Counter = 0;
-    u32 StartIndex = Info->WorkStartIndex;
-    u32 WorkEndIndex = StartIndex + Info->division_size + Info->extra;
+
+DWORD WINAPI GamesParseMultiThread(
+        LPVOID lpParameter) {
+    thread_info * Info = (thread_info *) lpParameter;
+    games * table = (games *) Info -> table;
+
+    u32 StartIndex = ((Info -> uStepSize * Info -> ThreadIndex) *
+        Info -> ubFirstLineFeed) + (Info -> ubFirstLineFeed - 1);
+    u32 EndIndex = StartIndex + ((Info -> uStepSize + Info -> Extra) *
+            Info -> ubFirstLineFeed);
+    u32 Counter = (Info -> uStepSize * Info -> ThreadIndex);
+
     char * location1 = 0;
     char * location2 = 0;
-    for (u32 x = StartIndex; x < WorkEndIndex; x += 7) {
-        location1 = &(Info->buffer[Info->location[x] + 2]);
-        Info->table->Data[Counter].id = fast_atoi(location1);
-        load_string(
-                Info->location[x+1] + 2,
-                Info->location[x+2] - 1,
-                &(Info->buffer[Info->location[x+1] + 2]),
-                sizeof(Info->table->Data[Counter].name),
-                Info->table->Data[Counter].name);
-        load_string(
-                Info->location[x+2] + 2,
-                Info->location[x+3] - 1,
-                &Info->buffer[Info->location[x+2] + 2],
-                sizeof(Info->table->Data[Counter].release_date),
-                Info->table->Data[Counter].release_date);
-        location2 = &Info->buffer[Info->location[x] + 3];
-        Info->table->Data[Counter].is_free = (u8) fast_atoi(location2);
-        load_string(
-                Info->location[x+6] + 2,
-                Info->location[x+7] - 1,
-                &Info->buffer[Info->location[x+2] + 2],
-                sizeof(Info->table->Data[Counter].type),
-                Info->table->Data[Counter].type);
+
+    for (u32 x = StartIndex; x < EndIndex; x += Info -> ubFirstLineFeed) {
+        // location1 = &(Info -> caBuffer[Info -> uaLocation[x] + 2]);
+        location1 = Info -> caBuffer + (Info -> uaLocation[x] + 2);
+        table -> Data[Counter].uID = FastAtoi(location1);
+
+        CopyString(
+                Info -> uaLocation[x+1] + 2,
+                Info -> uaLocation[x+2] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+1] + 2),
+                sizeof(table -> Data[Counter].sName),
+                table -> Data[Counter].sName);
+
+        CopyString(
+                Info -> uaLocation[x+2] + 2,
+                Info -> uaLocation[x+3] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+2] + 2),
+                sizeof(table -> Data[Counter].sReleaseDate),
+                table -> Data[Counter].sReleaseDate);
+
+        // location2 = &(Info -> caBuffer[Info -> uaLocation[x] + 3]);
+        location2 = Info -> caBuffer + (Info -> uaLocation[x+3]) + 2;
+        table -> Data[Counter].ubIsFree = (u8) FastAtoi(location2);
+
+        CopyString(
+                Info -> uaLocation[x+6] + 2,
+                Info -> uaLocation[x+7] - 1,
+                Info -> caBuffer + (Info -> uaLocation[x+6] + 2),
+                sizeof(table ->Data[Counter].sType),
+                table -> Data[Counter].sType);
 
         Counter++;
     }
+    if (Info -> ThreadIndex == 3) {
+        table -> Data[Counter] = {};
+    }
+    return 0;
 }
 
-void game_column_parse(
+DWORD WINAPI CategoryParseMultiThread(
+        LPVOID lpParameter) {
+    thread_info * Info = (thread_info *) lpParameter;
+    category * table = (category *) Info -> table;
+
+    u32 StartIndex = ((Info -> uStepSize * Info -> ThreadIndex) *
+        Info -> ubFirstLineFeed) + (Info -> ubFirstLineFeed - 1);
+    u32 EndIndex = StartIndex + ((Info -> uStepSize + Info -> Extra) *
+            Info -> ubFirstLineFeed);
+    u32 Counter = (Info -> uStepSize * Info -> ThreadIndex);
+
+    char * location1 = 0;
+    char * location2 = 0;
+
+    for (u32 x = StartIndex; x < EndIndex; x += Info -> ubFirstLineFeed) {
+        // location1 = &(Info -> caBuffer[Info -> uaLocation[x] + 2]);
+        location1 = Info -> caBuffer + (Info -> uaLocation[x] + 2);
+        table -> Data[Counter].uID = FastAtoi(location1);
+
+        CopyString(
+                Info -> uaLocation[x+1] + 2,
+                Info -> uaLocation[x+2] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+1] + 2),
+                sizeof(table -> Data[Counter].sCategory),
+                table -> Data[Counter].sCategory);
+        Counter++;
+    }
+    return 0;
+}
+
+DWORD WINAPI SummaryParseMultiThread(
+        LPVOID lpParameter) {
+    thread_info * Info = (thread_info *) lpParameter;
+    summary * table = (summary *) Info -> table;
+
+    u32 StartIndex = ((Info -> uStepSize * Info -> ThreadIndex) *
+        Info -> ubFirstLineFeed) + (Info -> ubFirstLineFeed - 1);
+    u32 EndIndex = StartIndex + ((Info -> uStepSize + Info -> Extra) *
+            Info -> ubFirstLineFeed);
+    u32 Counter = (Info -> uStepSize * Info -> ThreadIndex);
+
+    char * location1 = 0;
+
+    for (u32 x = StartIndex; x < EndIndex; x += Info -> ubFirstLineFeed) {
+        // location1 = &(Info -> caBuffer[Info -> uaLocation[x] + 2]);
+        location1 = Info -> caBuffer + (Info -> uaLocation[x] + 2);
+        table -> Data[Counter].uID = FastAtoi(location1);
+
+        CopyString(
+                Info -> uaLocation[x+1] + 2,
+                Info -> uaLocation[x+2] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+1] + 2),
+                sizeof(table -> Data[Counter].sSummary),
+                table -> Data[Counter].sSummary);
+        Counter++;
+    }
+    return 0;
+}
+
+DWORD WINAPI GenreParseMultiThread(
+        LPVOID lpParameter) {
+    thread_info * Info = (thread_info *) lpParameter;
+    genre * table = (genre *) Info -> table;
+
+    u32 StartIndex = ((Info -> uStepSize * Info -> ThreadIndex) *
+        Info -> ubFirstLineFeed) + (Info -> ubFirstLineFeed - 1);
+    u32 EndIndex = StartIndex + ((Info -> uStepSize + Info -> Extra) *
+            Info -> ubFirstLineFeed);
+    u32 Counter = (Info -> uStepSize * Info -> ThreadIndex);
+
+    char * location1 = 0;
+
+    for (u32 x = StartIndex; x < EndIndex; x += Info -> ubFirstLineFeed) {
+        // location1 = &(Info -> caBuffer[Info -> uaLocation[x] + 2]);
+        location1 = Info -> caBuffer + (Info -> uaLocation[x] + 2);
+        table -> Data[Counter].uID = FastAtoi(location1);
+
+        CopyString(
+                Info -> uaLocation[x+1] + 2,
+                Info -> uaLocation[x+2] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+1] + 2),
+                sizeof(table -> Data[Counter].sGenre),
+                table -> Data[Counter].sGenre);
+        Counter++;
+    }
+    return 0;
+}
+
+DWORD WINAPI OtherParseMultiThread(
+        LPVOID lpParameter) {
+    thread_info * Info = (thread_info *) lpParameter;
+    other * table = (other *) Info -> table;
+
+    u32 StartIndex = ((Info -> uStepSize * Info -> ThreadIndex) *
+        Info -> ubFirstLineFeed) + (Info -> ubFirstLineFeed - 1);
+    u32 EndIndex = StartIndex + ((Info -> uStepSize + Info -> Extra) *
+            Info -> ubFirstLineFeed);
+    u32 Counter = (Info -> uStepSize * Info -> ThreadIndex);
+
+    char * location1 = 0;
+    char * location2 = 0;
+
+    for (u32 x = StartIndex; x < EndIndex; x += Info -> ubFirstLineFeed) {
+        // location1 = &(Info -> caBuffer[Info -> uaLocation[x] + 2]);
+        location1 = Info -> caBuffer + (Info -> uaLocation[x] + 2);
+        table -> Data[Counter].uID = FastAtoi(location1);
+
+        CopyString(
+                Info -> uaLocation[x+1] + 2,
+                Info -> uaLocation[x+2] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+1] + 2),
+                sizeof(table -> Data[Counter].sDeveloper),
+                table -> Data[Counter].sDeveloper);
+
+        CopyString(
+                Info -> uaLocation[x+2] + 2,
+                Info -> uaLocation[x+3] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+2] + 2),
+                sizeof(table -> Data[Counter].sPublisher),
+                table -> Data[Counter].sPublisher);
+
+        location2 = Info -> caBuffer + (Info -> uaLocation[x + 9] + 2);
+        table -> Data[Counter].fPrice = (f64)FastAtoi(location2) / (f64) 100;
+
+        CopyString(
+                Info -> uaLocation[x+12] + 2,
+                Info -> uaLocation[x+13] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                Info -> caBuffer + (Info -> uaLocation[x+12] + 2),
+                sizeof(table -> Data[Counter].sLanguage),
+                table -> Data[Counter].sLanguage);
+        Counter++;
+    }
+    return 0;
+}
+
+void GameColumnParse(
         struct games *table,
         u32 SizeArray,
         char * buffer,
         u32 * location) {
     for (u32 x = 0; x < 1; x++) {
-        load_string(
+        CopyString(
                 1,
                 location[x] - 1,
                 &buffer[1],
                 sizeof(table->Column[0]),
                 table->Column[0]);
-        load_string(
+
+        CopyString(
                 location[x] + 2,
                 location[x+1] - 1,
                 &buffer[location[x] + 2],
                 sizeof(table->Column[1]),
                 table->Column[1]);
-        load_string(
+
+        CopyString(
                 location[x+1] + 2,
                 location[x+2] - 1,
                 &buffer[location[x+1] + 2],
                 sizeof(table->Column[2]),
                 table->Column[2]);
-        load_string(
+
+        CopyString(
                 location[x+2] + 2,
                 location[x+3] - 1,
                 &buffer[location[x+2] + 2],
                 sizeof(table->Column[3]),
                 table->Column[3]);
-        load_string(
+
+        CopyString(
                 location[x+5] + 2,
                 location[x+6] - 1,
                 &buffer[location[x+5] + 2],
                 sizeof(table->Column[4]),
                 table->Column[4]);
+    }
+}
+
+void CategoryColumnParse(
+        struct category *table,
+        u32 SizeArray,
+        char * buffer,
+        u32 * location) {
+    for (u32 x = 0; x < 1; x++) {
+        CopyString(
+                1,
+                location[x] - 1,
+                &buffer[1],
+                sizeof(table->Column[0]),
+                table->Column[0]);
+
+        CopyString(
+                location[x] + 2,
+                location[x+1] - 1,
+                &buffer[location[x] + 2],
+                sizeof(table->Column[1]),
+                table->Column[1]);
+    }
+}
+
+void GenreColumnParse(
+        struct genre *table,
+        u32 SizeArray,
+        char * buffer,
+        u32 * location) {
+    for (u32 x = 0; x < 1; x++) {
+        CopyString(
+                1,
+                location[x] - 1,
+                &buffer[1],
+                sizeof(table->Column[0]),
+                table->Column[0]);
+
+        CopyString(
+                location[x+1] + 2,
+                location[x+2] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                buffer + (location[x+1] + 2),
+                sizeof(table -> Column[1]),
+                table -> Column[1]);
+    }
+}
+
+void SummaryColumnParse(
+        struct summary *table,
+        u32 SizeArray,
+        char * buffer,
+        u32 * location) {
+    for (u32 x = 0; x < 1; x++) {
+        CopyString(
+                1,
+                location[x] - 1,
+                &buffer[1],
+                sizeof(table->Column[0]),
+                table->Column[0]);
+
+        CopyString(
+                location[x+1] + 2,
+                location[x+2] - 1,
+                // &(Info -> caBuffer[Info -> uaLocation[x+2] + 2]),
+                buffer + (location[x+1] + 2),
+                sizeof(table -> Column[1]),
+                table -> Column[1]);
+    }
+}
+
+void OtherColumnParse(
+        struct other *table,
+        u32 SizeArray,
+        char * buffer,
+        u32 * location) {
+    for (u32 x = 0; x < 1; x++) {
+        CopyString(
+                1,
+                location[x] - 1,
+                &buffer[1],
+                sizeof(table->Column[0]),
+                table->Column[0]);
+
+        CopyString(
+                location[x+1] + 2,
+                location[x+2] - 1,
+                &buffer[location[x+1] + 2],
+                sizeof(table->Column[1]),
+                table->Column[1]);
+        CopyString(
+                location[x+2] + 2,
+                location[x+3] - 1,
+                &buffer[location[x+2] + 2],
+                sizeof(table->Column[2]),
+                table->Column[2]);
+        CopyString(
+                location[x+12] + 2,
+                location[x+13] - 1,
+                &buffer[location[x+12] + 2],
+                sizeof(table->Column[3]),
+                table->Column[3]);
     }
 }
