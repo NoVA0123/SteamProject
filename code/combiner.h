@@ -17,6 +17,7 @@
 struct combined {
     u32 uID;
     char sData[1024];
+    u32 uSizeArray;
 };
 
 void GameCombine(

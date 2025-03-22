@@ -82,7 +82,8 @@ void GameCombine(
         combined * CombinedData,
         struct games * GameTable) {
     u32 SizeArray = GameTable -> uSizeArray;
-    for (u32 x = 0; x < 10; x++) {
+    CombinedData -> uSizeArray = SizeArray;
+    for (u32 x = 0; x < SizeArray; x++) {
         CombinedData[x].sData[0] = '\0';
         CombinedData[x].uID = GameTable -> Data[x].uID;
 
@@ -107,10 +108,19 @@ void GameCombine(
     }
 }
 
-/*void CategoryCombine(
+void GenreCombine(
         combined * CombinedData,
-        struct category * GameTable) {
-    u32 SizeArray = GameTable -> uSizeArray;
-    for (u32 x = 0; x < 10; x++) {
+        struct genre * GenreTable
+        ) {
+    u32 SizeArray = GenreTable -> uSizeArray;
+    u32 Counter = 0;
+    for (u32 x = 0; x < SizeArray; x++) {
+        while (CombinedData[Counter].uID != GenreTable -> Data[x].uID) {
+            Counter++;
+        }
+        CopyTheStringInCombiner(
+                CombinedData[Counter].sData,
+                GenreTable -> Data[x].sGenre,
+                sizeof(GenreTable -> Data[x].sGenre));
     }
-}*/
+}

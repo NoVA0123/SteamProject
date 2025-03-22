@@ -1,6 +1,6 @@
 Data/
 build/
-.vs/
+/.vs/
 code/asm_lib/
 code/gpt_test.cpp
 code/asm_test.cpp
