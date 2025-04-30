@@ -36,14 +36,19 @@ struct clocks_recorder {
 
 static struct clocks_recorder GlobalRecord;
 
-void BeginTesterForTheFunction(void);
+void
+BeginTesterForTheFunction(void);
 
-void EndTheTester(void);
+void
+EndTheTester(void);
 
-u8 EvaluateTest(char const * Name, u64 ByteCount, u64 PageFault);
+u8
+EvaluateTest(char const * Name, u64 ByteCount, u64 PageFault);
 
-u8 EvaluateTestNoPageFault(char const * Name, u64 ByteCount);
+u8
+EvaluateTestNoPageFault(char const * Name, u64 ByteCount);
 
-u8 EvaluateTestNoPageFaultAndNoSpeed(char const * Name);
+u8
+EvaluateTestNoPageFaultAndNoSpeed(char const * Name);
 
 #endif  // W__CODE_REPETITION_TESTER_H_

@@ -12,38 +12,48 @@
 #include "repetition_tester.h" 
 
 
-void BeginTesterForTheFunction(void) {
+void
+BeginTesterForTheFunction(void)
+{
     GlobalRecord.BeginTSC = read_cpu_timer();
 }
 
-void EndTheTester(void) {
+void
+EndTheTester(void)
+{
     GlobalRecord.EndTSC = read_cpu_timer();
 }
 
-//TODO(Abhijit): Run the begin then end the TSC after that record min and max and time for current min
-u8 EvaluateTest(char const * Name, u64 ByteCount, u64 PageFault) {
+u8
+EvaluateTest(char const * Name, u64 ByteCount, u64 PageFault)
+{
     u64 TotalClocks = GlobalRecord.EndTSC - GlobalRecord.BeginTSC;
     u64 CPUFREQ = estimate_cpu_timer_freq();
     f64 TimeTaken = (f64)TotalClocks / (f64)CPUFREQ;
 
-    GlobalRecord.CurPageFault = PageFault -
-        GlobalRecord.CurPageFault;
+    GlobalRecord.CurPageFault = PageFault - GlobalRecord.CurPageFault;
 
     GlobalRecord.CurrentMinTime += TimeTaken;
     GlobalRecord.Record.TotalClocks += TotalClocks;
     GlobalRecord.Record.TotalCount++;
     GlobalRecord.TotalPageFault += GlobalRecord.CurPageFault;
 
-    if ((TimeTaken < GlobalRecord.Record.MinTime) || (GlobalRecord.Record.MinTime == 0)) {
+    if ((TimeTaken < GlobalRecord.Record.MinTime) ||
+            (GlobalRecord.Record.MinTime == 0))
+    {
         GlobalRecord.Record.MinTime = TimeTaken;
         GlobalRecord.CurrentMinTime = 0.0f;
         GlobalRecord.Record.MinPageFault = GlobalRecord.CurPageFault;
-    } else if (TimeTaken > GlobalRecord.Record.MaxTime) {
+    }
+    else if (TimeTaken > GlobalRecord.Record.MaxTime)
+    {
         GlobalRecord.Record.MaxTime = TimeTaken;
         GlobalRecord.Record.MaxPageFault = GlobalRecord.CurPageFault;
     }
 
-    if ((GlobalRecord.CurrentMinTime > 10.0f) || (GlobalRecord.Record.TotalCount == 1)) {
+    if ((GlobalRecord.CurrentMinTime > 10.0f) ||
+            (GlobalRecord.Record.TotalCount == 1))
+    {
         f64 MegaByte = 1024.0f * 1024.0f;
         f64 GigaByte = 1024.0f * MegaByte;
 
@@ -91,7 +101,9 @@ u8 EvaluateTest(char const * Name, u64 ByteCount, u64 PageFault) {
     return 0;
 }
 
-u8 EvaluateTestNoPageFault(char const * Name, u64 ByteCount) {
+u8
+EvaluateTestNoPageFault(char const * Name, u64 ByteCount)
+{
     u64 TotalClocks = GlobalRecord.EndTSC - GlobalRecord.BeginTSC;
     u64 CPUFREQ = estimate_cpu_timer_freq();
     f64 TimeTaken = (f64)TotalClocks / (f64)CPUFREQ;
@@ -100,17 +112,23 @@ u8 EvaluateTestNoPageFault(char const * Name, u64 ByteCount) {
     GlobalRecord.Record.TotalClocks += TotalClocks;
     GlobalRecord.Record.TotalCount++;
 
-    if ((TimeTaken < GlobalRecord.Record.MinTime) || (GlobalRecord.Record.MinTime == 0)) {
+    if ((TimeTaken < GlobalRecord.Record.MinTime) ||
+            (GlobalRecord.Record.MinTime == 0))
+    {
         GlobalRecord.Record.MinTime = TimeTaken;
         GlobalRecord.CurrentMinTime = 0.0f;
         GlobalRecord.Record.MinClocks = TotalClocks;
     }
-    if (TimeTaken > GlobalRecord.Record.MaxTime) {
+
+    if (TimeTaken > GlobalRecord.Record.MaxTime)
+    {
         GlobalRecord.Record.MaxTime = TimeTaken;
         GlobalRecord.Record.MaxClocks = TotalClocks;
     }
 
-    if ((GlobalRecord.CurrentMinTime > 10.0f) || (GlobalRecord.Record.TotalCount == 10)) {
+    if ((GlobalRecord.CurrentMinTime > 10.0f) ||
+            (GlobalRecord.Record.TotalCount == 10))
+    {
         f64 MegaByte = 1024.0f * 1024.0f;
         f64 GigaByte = 1024.0f * MegaByte;
 
@@ -148,7 +166,9 @@ u8 EvaluateTestNoPageFault(char const * Name, u64 ByteCount) {
     return 0;
 }
 
-u8 EvaluateTestNoPageFaultAndNoSpeed(char const * Name) {
+u8
+EvaluateTestNoPageFaultAndNoSpeed(char const * Name)
+{
     u64 TotalClocks = GlobalRecord.EndTSC - GlobalRecord.BeginTSC;
     u64 CPUFREQ = estimate_cpu_timer_freq();
     f64 TimeTaken = (f64)TotalClocks / (f64)CPUFREQ;
@@ -157,17 +177,23 @@ u8 EvaluateTestNoPageFaultAndNoSpeed(char const * Name) {
     GlobalRecord.Record.TotalClocks += TotalClocks;
     GlobalRecord.Record.TotalCount++;
 
-    if ((TimeTaken < GlobalRecord.Record.MinTime) || (GlobalRecord.Record.MinTime == 0)) {
+    if ((TimeTaken < GlobalRecord.Record.MinTime) ||
+            (GlobalRecord.Record.MinTime == 0))
+    {
         GlobalRecord.Record.MinTime = TimeTaken;
         GlobalRecord.CurrentMinTime = 0.0f;
         GlobalRecord.Record.MinClocks = TotalClocks;
     }
-    if (TimeTaken > GlobalRecord.Record.MaxTime) {
+
+    if (TimeTaken > GlobalRecord.Record.MaxTime)
+    {
         GlobalRecord.Record.MaxTime = TimeTaken;
         GlobalRecord.Record.MaxClocks = TotalClocks;
     }
 
-    if ((GlobalRecord.CurrentMinTime > 10.0f) || (GlobalRecord.Record.TotalCount == 10)) {
+    if ((GlobalRecord.CurrentMinTime > 10.0f) ||
+            (GlobalRecord.Record.TotalCount == 10))
+    {
         f64 AvgClocks = (f64) GlobalRecord.Record.TotalClocks /
             (f64) GlobalRecord.Record.TotalCount;
         f64 AvgTime = AvgClocks / (f64) CPUFREQ;

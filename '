@@ -1,0 +1,562 @@
+/* ==================================================================
+   $File: $
+   $Data: $
+   $Revision: $
+   $Creator: Abhijit Rai $
+   $Notice: (C) Copyright 2025 by Abhijit Rai. All Rights Reserved. $
+   ================================================================= */
+
+#include "combiner.h"
+#include "csv_parser.h"
+#include "data_cleaning.h"
+#include "typedef.h"
+#include <math.h>
+#include <stdio.h>
+
+void CopyTheStringInCombiner(
+        char *CombineBuffer,
+        char *DataBuffer,
+        u16 Size)
+{
+    u16 Index = 0;
+    for (u16 x = 0; x < 1024; x++)
+    {
+        if (CombineBuffer[x] == '\0')
+        {
+            CombineBuffer[x] = ' ';
+            for (u16 i = 0; i < Size; i++)
+            {
+                if (DataBuffer[i] == '\0')
+                {
+                    Index = i + 1;
+                    break;
+                }
+                CombineBuffer[x + i + 1] = DataBuffer[i];
+            }
+            CombineBuffer[x + Index] = '\0';
+            break;
+        }
+    }
+}
+
+void ConvertIntToTheString(
+        char *CombineBuffer,
+        u32 Value)
+{
+    char buffer[10];
+    u8 NulIndex = 0;
+    u32 Quotient;
+    u32 Remainder;
+    u8 IfNotZero = 1;
+
+    if (Value == 0)
+    {
+        IfNotZero = 0;
+    }
+    else
+    {
+        for (u8 x = 0; x < 10; x++) {
+            if (Value == 0)
+            {
+                NulIndex = x;
+                buffer[x] = '\0';
+                break;
+            }
+
+            Quotient = Value / 10;
+            Remainder = Value - (Quotient * 10);
+            buffer[x] = (char)Remainder + '0';
+            Value /= 10;
+        }
+    }
+
+    for (u16 x = 0; x < 1024; x++)
+    {
+        if (CombineBuffer[x] == '\0')
+        {
+            CombineBuffer[x] = ' ';
+            if (!IfNotZero) {
+                CombineBuffer[x + 1] = '0';
+                CombineBuffer[x + 2] = '\0';
+                break;
+            } else
+            {
+                for (u16 i = 0; i < NulIndex; i++)
+                {
+                    CombineBuffer[x + i + 1] = buffer[NulIndex - i - 1];
+                }
+            }
+
+            CombineBuffer[x + NulIndex + 1] = '\0';
+            break;
+        }
+    }
+}
+
+void ConvertFloatToString(
+        float FloatValue,
+        char *CombineBuffer)
+{
+    char buffer[10];
+
+    int IntPart = (int)FloatValue;
+    float FloatPart = FloatValue - (float)IntPart;
+    int FloatPartAsInt = (int)(FloatPart * 100);
+
+    u32 Quotient;
+    u32 Remainder;
+    u8 IfNotZero = 1;
+    u8 NulIndex = 0;
+    u8 DecimalPlace = 0;
+
+    if (IntPart == 0)
+    {
+        buffer[0] = '0';
+        buffer[1] = '.';
+        DecimalPlace = 2;
+    } else
+    {
+        for (u8 x = 0; x < 10; x++)
+        {
+            if (IntPart == 0)
+            {
+                NulIndex = x;
+                buffer[x] = '.';
+                DecimalPlace = x + 1;
+                break;
+            }
+
+            Quotient = IntPart / 10;
+            Remainder = IntPart - (Quotient * 10);
+            buffer[x] = (char)Remainder + '0';
+            IntPart /= 10;
+        }
+    }
+
+    u8 AfterPoint = DecimalPlace + 2;
+    if (AfterPoint >= 10)
+    {
+        AfterPoint--;
+    }
+
+    if (FloatPartAsInt == 0)
+    {
+        buffer[DecimalPlace] = '0';
+        buffer[DecimalPlace + 1] = '0';
+    } else
+    {
+        for (u8 x = DecimalPlace; x < AfterPoint; x++)
+        {
+            if (FloatPartAsInt == 0)
+            {
+                NulIndex = x;
+                buffer[x] = '\0';
+                break;
+            }
+
+            Quotient = FloatPartAsInt / 10;
+            Remainder = FloatPartAsInt - (Quotient * 10);
+            buffer[x] = (char)Remainder + '0';
+            FloatPartAsInt /= 10;
+        }
+    }
+
+    for (u16 x = 0; x < 1024; x++)
+    {
+        if (CombineBuffer[x] == '\0')
+        {
+            CombineBuffer[x] = ' ';
+            for (u16 i = 0; i < NulIndex; i++)
+            {
+                CombineBuffer[x + i + 1] = buffer[NulIndex - i - 1];
+            }
+            CombineBuffer[x + NulIndex + 1] = '\0';
+            break;
+        }
+    }
+}
+
+u32 CountOfPerfectScore(
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData)
+{
+    u32 Counter = 0;
+    for (u32 x = 0; x < GlobalIdData->uSize; x++)
+    {
+        Counter += (GlobalIdDetails[x].ubOccurence >= MAX_COLUMN_SCORE);
+    }
+    return Counter;
+}
+
+void InitializeCombiner(struct combined *CombinedData,
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData)
+{
+    u32 CounterForCombiner = 0;
+    for (u32 x = 0; x < GlobalIdData->uSize; x++)
+    {
+        if (GlobalIdDetails[x].ubOccurence >= MAX_COLUMN_SCORE)
+        {
+            CombinedData[CounterForCombiner].uID = GlobalIdDetails[x].uID;
+        }
+    }
+}
+
+void GameCombine(
+        struct combined *CombinedData,
+        struct games *GameTable,
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData,
+        u32 TotalRowsOfCombiner)
+{
+    u32 CounterForCombiner = 0;
+    u32 CounterForTable = 0;
+
+    for (u32 x = 0; x < GlobalIdData->uSize; x++)
+    {
+        if (GlobalIdDetails[x].ubOccurence >= MAX_COLUMN_SCORE)
+        {
+            while (GlobalIdDetails[x].uID != GameTable->Data[CounterForTable].uID)
+            {
+                if (CounterForTable > GameTable->uSizeArray)
+                {
+                    break;
+                }
+
+                CounterForTable++;
+            }
+
+            while (CombinedData[CounterForCombiner].uID !=
+                    GameTable->Data[CounterForTable].uID)
+            {
+                if (CounterForCombiner > TotalRowsOfCombiner)
+                {
+                    break;
+                }
+
+                CounterForCombiner++;
+            }
+
+            if (CounterForTable > GameTable->uSizeArray)
+            {
+                break;
+            }
+
+            if (CounterForCombiner > TotalRowsOfCombiner)
+            {
+                break;
+            }
+
+            CopyTheStringInCombiner(
+                    CombinedData[CounterForCombiner].sData,
+                    GameTable->Data[CounterForTable].sName,
+                    sizeof(GameTable->Data[CounterForTable].sName));
+
+            CopyTheStringInCombiner(
+                    CombinedData[CounterForCombiner].sData,
+                    GameTable->Data[CounterForTable].sReleaseDate,
+                    sizeof(GameTable->Data[CounterForTable].sReleaseDate));
+
+            ConvertIntToTheString(CombinedData[CounterForCombiner].sData,
+                    GameTable->Data[CounterForTable].ubIsFree);
+
+            CopyTheStringInCombiner(CombinedData[CounterForCombiner].sData,
+                    GameTable->Data[CounterForTable].sType,
+                    sizeof(GameTable->Data[CounterForTable].sType));
+        }
+    }
+    printf("%u\n", CombinedData[0].uID);
+}
+
+void CategoryCombine(
+        combined *CombinedData,
+        struct category *CategoryTable,
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData,
+        u32 TotalRowsOfCombiner)
+{
+    u32 CounterForCombiner = 0;
+    u32 CounterForTable = 0;
+    u32 CounterSwitch = 0;
+
+    for (u32 x = 0; x < GlobalIdData->uSize; x++)
+    {
+        if (GlobalIdDetails[x].ubOccurence == MAX_COLUMN_SCORE)
+        {
+            while (GlobalIdDetails[x].uID !=
+                    CategoryTable->Data[CounterForTable].uID)
+            {
+                if (CounterForTable > CategoryTable->uSizeArray)
+                {
+                    break;
+                }
+
+                CounterForTable++;
+                CounterSwitch = 0;
+            }
+
+            while (CombinedData[CounterForCombiner].uID !=
+                    CategoryTable->Data[CounterForTable].uID)
+            {
+                if (CounterForCombiner > TotalRowsOfCombiner)
+                {
+                    break;
+                }
+
+                CounterForCombiner++;
+            }
+
+            if (CounterSwitch < 4)
+            {
+                if (CounterForTable > CategoryTable->uSizeArray)
+                {
+                    break;
+                }
+
+                if (CounterForCombiner > TotalRowsOfCombiner)
+                {
+                    break;
+                }
+
+                CopyTheStringInCombiner(
+                        CombinedData[CounterForCombiner].sData,
+                        CategoryTable->Data[CounterForTable].sCategory,
+                        sizeof(CategoryTable->Data[CounterForTable].sCategory));
+                CounterSwitch++;
+            }
+        }
+    }
+}
+
+void GenreCombine(
+        combined *CombinedData,
+        struct genre *GenreTable,
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData,
+        u32 TotalRowsOfCombiner)
+{
+    u32 CounterForCombiner = 0;
+    u32 CounterForTable = 0;
+    u32 CounterSwitch = 0;
+
+    for (u32 x = 0; x < GlobalIdData->uSize; x++)
+    {
+        if (GlobalIdDetails[x].ubOccurence == MAX_COLUMN_SCORE)
+        {
+            while (GlobalIdDetails[x].uID != GenreTable->Data[CounterForTable].uID)
+            {
+                if (CounterForTable > GenreTable->uSizeArray)
+                {
+                    break;
+                }
+
+                CounterForTable++;
+                CounterSwitch = 0;
+            }
+            while (CombinedData[CounterForCombiner].uID !=
+                    GenreTable->Data[CounterForTable].uID)
+            {
+                if (CounterForCombiner > TotalRowsOfCombiner)
+                {
+                    break;
+                }
+
+                CounterForCombiner++;
+            }
+
+            if (CounterSwitch < 4)
+            {
+                if (CounterForTable > GenreTable->uSizeArray)
+                {
+                    break;
+                }
+
+                if (CounterForCombiner > TotalRowsOfCombiner)
+                {
+                    break;
+                }
+
+                CopyTheStringInCombiner(
+                        CombinedData[CounterForCombiner].sData,
+                        GenreTable->Data[CounterForTable].sGenre,
+                        sizeof(GenreTable->Data[CounterForTable].sGenre));
+                CounterSwitch++;
+            }
+        }
+    }
+}
+
+void SummaryCombine(
+        combined *CombinedData,
+        struct summary *SummaryTable,
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData,
+        u32 TotalRowsOfCombiner)
+{
+    u32 CounterForCombiner = 0;
+    u32 CounterForTable = 0;
+    u32 CounterSwitch = 0;
+
+    for (u32 x = 0; x < GlobalIdData->uSize; x++)
+    {
+        if (GlobalIdDetails[x].ubOccurence == MAX_COLUMN_SCORE)
+        {
+            while (GlobalIdDetails[x].uID !=
+                    SummaryTable->Data[CounterForTable].uID)
+            {
+                if (CounterForTable > SummaryTable->uSizeArray)
+                {
+                    break;
+                }
+
+                CounterForTable++;
+                CounterSwitch = 0;
+            }
+            while (CombinedData[CounterForCombiner].uID !=
+                    SummaryTable->Data[CounterForTable].uID)
+            {
+                if (CounterForCombiner > TotalRowsOfCombiner)
+                {
+                    break;
+                }
+
+                CounterForCombiner++;
+            }
+
+            if (CounterForTable > SummaryTable->uSizeArray)
+            {
+                break;
+            }
+
+            if (CounterForCombiner > TotalRowsOfCombiner)
+            {
+                break;
+            }
+
+            CopyTheStringInCombiner(
+                    CombinedData[CounterForCombiner].sData,
+                    SummaryTable->Data[CounterForTable].sSummary,
+                    sizeof(SummaryTable->Data[CounterForTable].sSummary));
+            CounterSwitch++;
+        }
+    }
+}
+
+void
+OtherCombine(
+        combined *CombinedData,
+        struct other *OtherTable,
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData,
+        u32 TotalRowsOfCombiner)
+{
+    u32 CounterForCombiner = 0;
+    u32 CounterForTable = 0;
+    u32 CounterSwitch = 0;
+
+    for (u32 x = 0; x < GlobalIdData->uSize; x++)
+    {
+        if (GlobalIdDetails[x].ubOccurence == MAX_COLUMN_SCORE)
+        {
+            while (GlobalIdDetails[x].uID != OtherTable->Data[CounterForTable].uID)
+            {
+                if (CounterForTable > OtherTable->uSizeArray)
+                {
+                    break;
+                }
+
+                CounterForTable++;
+                CounterSwitch = 0;
+            }
+            while (CombinedData[CounterForCombiner].uID !=
+                    OtherTable->Data[CounterForTable].uID)
+            {
+                if (CounterForCombiner > TotalRowsOfCombiner)
+                {
+                    break;
+                }
+
+                CounterForCombiner++;
+            }
+
+            if (CounterForTable > OtherTable->uSizeArray)
+            {
+                break;
+            }
+
+            if (CounterForCombiner > TotalRowsOfCombiner)
+            {
+                break;
+            }
+
+            CopyTheStringInCombiner(
+                    CombinedData[CounterForCombiner].sData,
+                    OtherTable->Data[CounterForTable].sDeveloper,
+                    sizeof(OtherTable->Data[CounterForTable].sDeveloper));
+
+            CopyTheStringInCombiner(
+                    CombinedData[CounterForCombiner].sData,
+                    OtherTable->Data[CounterForTable].sPublisher,
+                    sizeof(OtherTable->Data[CounterForTable].sDeveloper));
+
+            ConvertFloatToString(OtherTable->Data[CounterForTable].fPrice,
+                    CombinedData[CounterForCombiner].sData);
+
+            CopyTheStringInCombiner(
+                    CombinedData[CounterForCombiner].sData,
+                    OtherTable->Data[CounterForTable].sLanguage,
+                    sizeof(OtherTable->Data[CounterForTable].sDeveloper));
+
+            CounterSwitch++;
+        }
+    }
+}
+
+void CombineIntoString(
+        combined *CombinedData,
+        struct games *GameTable,
+        struct category *CategoryTable,
+        struct genre *GenreTable,
+        struct summary *SummaryTable,
+        struct other *OtherTable,
+        struct id_details *GlobalIdDetails,
+        struct id_data *GlobalIdData,
+        u32 TotalRowsOfCombiner)
+{
+    InitializeCombiner(CombinedData, GlobalIdDetails, GlobalIdData);
+
+    GameCombine(
+            CombinedData,
+            GameTable,
+            GlobalIdDetails,
+            GlobalIdData,
+            TotalRowsOfCombiner);
+
+    /*CategoryCombine(
+            CombinedData,
+            CategoryTable,
+            GlobalIdDetails,
+            GlobalIdData,
+            TotalRowsOfCombiner);
+
+    GenreCombine(
+            CombinedData,
+            GenreTable,
+            GlobalIdDetails,
+            GlobalIdData,
+            TotalRowsOfCombiner);
+
+    SummaryCombine(
+            CombinedData,
+            SummaryTable,
+            GlobalIdDetails,
+            GlobalIdData,
+            TotalRowsOfCombiner);
+
+    OtherCombine(
+            CombinedData,
+            OtherTable,
+            GlobalIdDetails,
+            GlobalIdData,
+            TotalRowsOfCombiner);*/
+}

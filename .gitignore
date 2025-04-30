@@ -9,3 +9,5 @@ code/page_fault_display.cpp
 code/test_fread.cpp
 code/win32_base.cpp
 code/windows_multithread_test.cpp
+todo.txt
+debug/

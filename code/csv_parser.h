@@ -17,7 +17,8 @@
 #include "typedef.h"
 
 
-struct stat FileSize(char *pfileName);
+struct stat
+FileSize(char *pfileName);
 
 struct csv_info {
     u32 uSizeArray;
@@ -96,81 +97,68 @@ struct other{
     u32 uSizeArray;
 };
 
-struct csv_info * GPTFindValuesFromBuffer(
-        char * buffer,
-        u32 * Values,
-        u64 size,
+struct csv_info *
+FindValuesFromBuffer(char * buffer, u32 * Values, u64 size,
         struct csv_info * GameInfo);
 
-struct csv_info * FindValuesFromBuffer(
-        char * buffer,
-        u32 * Values,
-        u64 size,
+void
+GamesParseSingleThread(struct games *table, u32 SizeArray, char * buffer,
+        u32 * location);
+
+void
+CategoryParseSingleThread(struct category *table,u32 SizeArray,
+        char * buffer, u32 * location);
+
+void
+GenreParseSingleThread(struct genre *table, u32 SizeArray, char * buffer,
+        u32 * location);
+
+void
+SummaryParseSingleThread(struct summary *table, u32 SizeArray, char * buffer,
+        u32 * location);
+
+void
+OtherParseSingleThread(struct other *table, u32 SizeArray, char * buffer,
+        u32 * location);
+
+void
+ThreadInitializer(void * table, char * buffer, u32 * locations,
+        u8 TotalThreads, struct thread_info * Info,
         struct csv_info * GameInfo);
 
-void GamesParseSingleThread(
-        struct games *table,
-        u32 SizeArray,
-        char * buffer,
+DWORD WINAPI
+GamesParseMultiThread(LPVOID lpParameter);
+
+DWORD WINAPI
+CategoryParseMultiThread(LPVOID lpParameter);
+
+DWORD WINAPI
+GenreParseMultiThread(LPVOID lpParameter);
+
+DWORD WINAPI
+SummaryParseMultiThread(LPVOID lpParameter);
+
+DWORD WINAPI
+OtherParseMultiThread(LPVOID lpParameter);
+
+void
+GameColumnParse(struct games *table, u32 SizeArray, char * buffer,
         u32 * location);
 
-void CategoryParseSingleThread(
-        struct category *table,
-        u32 SizeArray,
-        char * buffer,
+void
+CategoryColumnParse(struct category *table, u32 SizeArray, char * buffer,
         u32 * location);
 
-void ThreadInitializer(
-        void * table,
-        char * buffer,
-        u32 * locations,
-        u8 TotalThreads,
-        struct thread_info * Info,
-        struct csv_info * GameInfo);
-
-DWORD WINAPI GamesParseMultiThread(
-        LPVOID lpParameter);
-
-DWORD WINAPI CategoryParseMultiThread(
-        LPVOID lpParameter);
-
-DWORD WINAPI GenreParseMultiThread(
-        LPVOID lpParameter);
-
-DWORD WINAPI SummaryParseMultiThread(
-        LPVOID lpParameter);
-
-DWORD WINAPI OtherParseMultiThread(
-        LPVOID lpParameter);
-
-void GameColumnParse(
-        struct games *table,
-        u32 SizeArray,
-        char * buffer,
+void
+SummaryColumnParse(struct summary *table, u32 SizeArray, char * buffer,
         u32 * location);
 
-void CategoryColumnParse(
-        struct category *table,
-        u32 SizeArray,
-        char * buffer,
+void
+GenreColumnParse(struct genre *table, u32 SizeArray, char * buffer,
         u32 * location);
 
-void SummaryColumnParse(
-        struct summary *table,
-        u32 SizeArray,
-        char * buffer,
-        u32 * location);
-
-void GenreColumnParse(
-        struct genre *table,
-        u32 SizeArray,
-        char * buffer,
-        u32 * location);
-
-void OtherColumnParse(
-        struct other *table,
-        u32 SizeArray,
-        char * buffer,
+void
+OtherColumnParse(struct other *table, u32 SizeArray, char * buffer,
         u32 * location);
 
 #endif  // W__CODE_CSV_PARSER_H_
