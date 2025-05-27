@@ -481,6 +481,7 @@ GameCombineMultiThread(LPVOID lpParameter)
 
         CounterForCombiner += 1024;
     }
+    //printf("%u\n", CounterForCombiner);
 
     for (u16 x = 0; x < 1023; x++) {
         if (CombinedData[CounterForCombiner].uID == GameTable->Data[StartIndex].uID) {
@@ -488,6 +489,8 @@ GameCombineMultiThread(LPVOID lpParameter)
         }
         CounterForCombiner--;
     }
+    //printf("%u\n", CounterForCombiner);
+    //printf("StartIndex: %u\n", StartIndex);
     
     for (u32 x = StartIndex; x < EndIndex; x++)
     {

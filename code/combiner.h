@@ -12,7 +12,7 @@
 #include "csv_parser.h"
 #include "typedef.h"
 
-#define MAX_COLUMN_SCORE 15
+#define MAX_COLUMN_SCORE 14
 
 struct combined {
   u32 uID;

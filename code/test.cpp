@@ -6,6 +6,7 @@
    $Notice: (C) Copyright 2025 by Abhijit Rai. All Rights Reserved. $
    ================================================================= */
 
+#include <cstdlib>
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <math.h>
@@ -20,13 +21,19 @@
 #include "data_cleaning.h"
 #include "repetition_tester.h"
 #include "typedef.h"
+#include "BPE.h"
 
-#define MAX_NUM_THREADS 4
-
+#define MAX_NUM_THREADS 24
 #define PROFILER 1
+
 static thread_info ThreadInfo[MAX_NUM_THREADS];
 static function_parameter_data ApexNexus[MAX_NUM_THREADS];
 static combiner_threads CombinerWorkers[MAX_NUM_THREADS];
+static constructor_data ApexConstructorParameters[MAX_NUM_THREADS];
+static vocab_dictionary_data ApexVocabResetParameters[MAX_NUM_THREADS];
+static compressor_data ApexCompressorParameters[MAX_NUM_THREADS];
+static data_copy ApexDataCopyParameters[MAX_NUM_THREADS];
+
 HANDLE Threads[MAX_NUM_THREADS];
 DWORD ThreadID[MAX_NUM_THREADS];
 
@@ -45,6 +52,15 @@ enum FileNames {
     SummaryFile,
     OtherFile,
 };
+
+
+u8
+GetCpuThreadCount()
+{
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    return sysinfo.dwNumberOfProcessors;
+}
 
 void *
 GameParseInitialize(csv_info *Info, struct games *GamesTable)
@@ -137,7 +153,7 @@ CategoryParse(u32 SizeArray, char *buffer, u32 *SeveranceNexus)
                 &ThreadInfo[x], 0, &ThreadID[x]);
     }
 
-    WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     for (u8 x = 0; x < MAX_NUM_THREADS; x++)
     {
@@ -310,7 +326,7 @@ GameTableRecordingMultiThread(struct id_details *GlobalIdDetails,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -337,6 +353,10 @@ CategoryTableRecordingMultiThread(struct id_details *GlobalIdDetails,
             GlobalIdDetails, GlobalIdData,
             gCategoryTable.uSizeArray, ApexNexus);
 
+    //printf("Id data size: %u\n", GlobalIdData->uSize);
+    //printf("Size of Category Table: %u\n", gCategoryTable.uSizeArray);
+    //printf("Thread: %u Stepsize %u\n", ApexNexus[0].uStepSize, ApexNexus[0].ThreadIndex);
+
     for (u8 x = 0; x < MAX_NUM_THREADS; x++)
     {
         Threads[x] = CreateThread(0, 0, CheckCategoryTableMultiThread,
@@ -348,7 +368,7 @@ CategoryTableRecordingMultiThread(struct id_details *GlobalIdDetails,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -386,7 +406,7 @@ GenreTableRecordingMultiThread(struct id_details *GlobalIdDetails,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -424,7 +444,7 @@ SummaryTableRecordingMultiThread(struct id_details *GlobalIdDetails,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -461,7 +481,7 @@ OtherTableRecordingMultiThread(struct id_details *GlobalIdDetails,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -507,7 +527,7 @@ GameCombineInitializeAndExecuteMultiThread(u32 TotalRowsOfCombiner,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -541,7 +561,7 @@ CategoryCombineInitializeAndExecuteMultiThread(u32 TotalRowsOfCombiner,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -575,7 +595,7 @@ GenreCombineInitializeAndExecuteMultiThread(u32 TotalRowsOfCombiner,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -609,7 +629,7 @@ SummaryCombineInitializeAndExecuteMultiThread(u32 TotalRowsOfCombiner,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -643,7 +663,41 @@ OtherCombineInitializeAndExecuteMultiThread(u32 TotalRowsOfCombiner,
         }
     }
 
-    DWORD Result = WaitForMultipleObjects(4, Threads, TRUE, INFINITE);
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
+
+    if (Result == WAIT_FAILED)
+    {
+        printf("WaitForMultipleObjects failed in GameTable, Error: %lu\n",
+                GetLastError());
+    }
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        CloseHandle(Threads[x]);
+    }
+}
+
+void
+BPEVocabConstructorMultiThread(struct u16_array * TestingEnvironment,
+        struct pair_occurence * VocabDictionary, u16 PairArraySize,
+        u32 BPEEnvironmentArraySize)
+{
+    ThreadInitializerForVocabConstructor(TestingEnvironment, VocabDictionary,
+            PairArraySize, BPEEnvironmentArraySize, MAX_NUM_THREADS,
+            ApexConstructorParameters);
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        Threads[x] = CreateThread(0, 0, VocabConstructorMultiThread,
+                &ApexConstructorParameters[x], 0, &ThreadID[x]);
+
+        if (Threads[x] == NULL)
+        {
+            printf("Failed to created thread %u: %lu\n", x, GetLastError());
+        }
+    }
+
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
 
     if (Result == WAIT_FAILED)
     {
@@ -681,6 +735,207 @@ PerformMultiThreadCombiner(struct combined * CombinedData,
 }
 
 
+void
+BPEVocabResetMultiThread(struct pair_occurence * VocabDictionary,
+        u16 PairArraySize)
+{
+    ThreadInitializerForVocabReset(VocabDictionary, PairArraySize,
+            MAX_NUM_THREADS, ApexVocabResetParameters);
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        Threads[x] = CreateThread(0, 0, ResetVocabDictionaryMultiThread,
+                &ApexVocabResetParameters[x], 0, &ThreadID[x]);
+
+        if (Threads[x] == NULL)
+        {
+            printf("Failed to created thread %u: %lu\n", x, GetLastError());
+        }
+    }
+
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
+
+    if (Result == WAIT_FAILED)
+    {
+        printf("WaitForMultipleObjects failed in GameTable, Error: %lu\n",
+                GetLastError());
+    }
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        CloseHandle(Threads[x]);
+    }
+}
+
+void
+BPECompressionMultiThreadProcessor(struct u16_array * TestingEnvironment,
+        u16 PairArraySize, u32 BPEEnvironmentArraySize, struct vocab * Vocab,
+        u16 Index)
+{
+    ThreadInitializerForCompression(Vocab, Index, BPEEnvironmentArraySize,
+            TestingEnvironment, MAX_NUM_THREADS, ApexCompressorParameters);
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        Threads[x] = CreateThread(0, 0, BPECompressionMultiThread,
+                &ApexCompressorParameters[x], 0, &ThreadID[x]);
+
+        if (Threads[x] == NULL)
+        {
+            printf("Failed to created thread %u: %lu\n", x, GetLastError());
+        }
+    }
+
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
+
+    if (Result == WAIT_FAILED)
+    {
+        printf("WaitForMultipleObjects failed in GameTable, Error: %lu\n",
+                GetLastError());
+    }
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        CloseHandle(Threads[x]);
+    }
+}
+
+void
+BPEImplementationMultiThreadProfiled(struct u16_array *TestingEnvironment,
+        struct pair_occurence *VocabDictionary, u16 PairArraySize,
+        u32 BPEEnvironmentArraySize, struct vocab *Vocabs, u8 VocabSize)
+{
+    u64 StartForConstructor;
+    u64 EndForConstructor;
+    u64 StartForOccurence;
+    u64 EndForOccurence;
+    u64 StartForInsideReset;
+    u64 EndForInsideReset;
+    u64 StartForCompression;
+    u64 EndForCompression;
+
+    u64 ClocksForEachFunction[5];
+
+    u64 StartForOutsideReset = read_cpu_timer();
+    BPEVocabResetMultiThread(VocabDictionary, PairArraySize);
+    u64 EndForOutsideReset = read_cpu_timer() - StartForOutsideReset;
+    ClocksForEachFunction[0] = EndForOutsideReset;
+
+    for (u8 x = 0; x < VocabSize; x++)
+    {
+        StartForConstructor = read_cpu_timer();
+        BPEVocabConstructorMultiThread(TestingEnvironment, VocabDictionary,
+                PairArraySize, BPEEnvironmentArraySize);
+        EndForConstructor = read_cpu_timer() - StartForConstructor;
+        ClocksForEachFunction[1] += EndForConstructor;
+
+        StartForOccurence = read_cpu_timer();
+        MaxVocabOccurence(VocabDictionary, PairArraySize, x, Vocabs);
+        EndForOccurence = read_cpu_timer() - StartForOccurence;
+        ClocksForEachFunction[2] += EndForOccurence;
+
+        StartForInsideReset = read_cpu_timer();
+        BPEVocabResetMultiThread(VocabDictionary, PairArraySize);
+        EndForInsideReset = read_cpu_timer() - StartForInsideReset;
+        ClocksForEachFunction[3] += EndForInsideReset;
+
+        StartForCompression = read_cpu_timer();
+        BPECompressionMultiThreadProcessor(TestingEnvironment, PairArraySize,
+                BPEEnvironmentArraySize, Vocabs, x);
+        EndForCompression = read_cpu_timer() - StartForCompression;
+        ClocksForEachFunction[4] += EndForCompression;
+    }
+    u64 CPUFREQ = estimate_cpu_timer_freq();
+    u64 TotalClocks = 0;
+    for (u8 x = 0; x < 5; x++)
+    {
+        TotalClocks += ClocksForEachFunction[x];
+    }
+
+    printf("CPUFREQ: %llu\n", CPUFREQ);
+
+    printf("Total clks(time): %llu", TotalClocks);
+    printf(" (%.2fs)\n", (f64) TotalClocks / (f64) CPUFREQ);
+
+    printf("Outside reset clks(time): %llu", ClocksForEachFunction[0]);
+    printf(" (%.2fs)", (f64) ClocksForEachFunction[0] / (f64) CPUFREQ);
+    printf(" %.2f%%\n", ((f64) ClocksForEachFunction[0] / (f64) TotalClocks) *
+            100);
+
+    printf("Vocab constructor clks(time): %llu", ClocksForEachFunction[1]);
+    printf(" (%.2fs)", (f64) ClocksForEachFunction[1] / (f64) CPUFREQ);
+    printf(" %.2f%%\n", ((f64) ClocksForEachFunction[1] / (f64) TotalClocks) *
+            100);
+
+    printf("Occurence clks(time): %llu", ClocksForEachFunction[2]);
+    printf(" (%.2fs)", (f64) ClocksForEachFunction[2] / (f64) CPUFREQ);
+    printf(" %.2f%%\n", ((f64) ClocksForEachFunction[2] / (f64) TotalClocks) *
+            100);
+
+    printf("Inside reset clks(time): %llu", ClocksForEachFunction[3]);
+    printf(" (%.2fs)", (f64) ClocksForEachFunction[3] / (f64) CPUFREQ);
+    printf(" %.2f%%\n", ((f64) ClocksForEachFunction[3] / (f64) TotalClocks) *
+            100);
+
+    printf("Compression clks(time): %llu", ClocksForEachFunction[4]);
+    printf(" (%.2fs)", (f64) ClocksForEachFunction[4] / (f64) CPUFREQ);
+    printf(" %.2f%%\n", ((f64) ClocksForEachFunction[4] / (f64) TotalClocks) *
+            100);
+}
+
+void
+BPEImplementationMultiThread(struct u16_array *TestingEnvironment,
+        struct pair_occurence *VocabDictionary, u16 PairArraySize,
+        u32 BPEEnvironmentArraySize, struct vocab *Vocabs, u8 VocabSize)
+{
+    BPEVocabResetMultiThread(VocabDictionary, PairArraySize);
+    for (u8 x = 0; x < VocabSize; x++)
+    {
+        BPEVocabConstructorMultiThread(TestingEnvironment, VocabDictionary,
+                PairArraySize, BPEEnvironmentArraySize);
+        MaxVocabOccurence(VocabDictionary, PairArraySize, x, Vocabs);
+        BPEVocabResetMultiThread(VocabDictionary, PairArraySize);
+        BPECompressionMultiThreadProcessor(TestingEnvironment, PairArraySize,
+                BPEEnvironmentArraySize, Vocabs, x);
+    }
+}
+
+
+void
+BPECompressionCopy(struct u16_array * TestingEnvironment,
+        struct bpe_array * CompressedArray, u32 BPEEnvironmentArraySize)
+{
+    ThreadInitializeForCopyData(TestingEnvironment, CompressedArray,
+            BPEEnvironmentArraySize, ApexDataCopyParameters,
+            MAX_NUM_THREADS);
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        Threads[x] = CreateThread(0, 0,
+                SmallSequenceCompressionCopyMultiThread,
+                &ApexDataCopyParameters[x], 0, &ThreadID[x]);
+
+        if (Threads[x] == NULL)
+        {
+            printf("Failed to created thread %u: %lu\n", x, GetLastError());
+        }
+    }
+
+    DWORD Result = WaitForMultipleObjects(MAX_NUM_THREADS, Threads, TRUE, INFINITE);
+
+    if (Result == WAIT_FAILED)
+    {
+        printf("WaitForMultipleObjects failed in GameTable, Error: %lu\n",
+                GetLastError());
+    }
+
+    for (u8 x = 0; x < MAX_NUM_THREADS; x++)
+    {
+        CloseHandle(Threads[x]);
+    }
+}
+
+
 int
 main()
 {
@@ -708,8 +963,8 @@ main()
     u32 SizeArray = gGamesTable.uSizeArray;
 
     static struct id_details *pGlobalIdDetails;
-    pGlobalIdDetails =
-        (id_details *)malloc(sizeof(id_details) * gGamesTable.uSizeArray);
+    pGlobalIdDetails = (id_details *) malloc(sizeof(id_details)
+            * gGamesTable.uSizeArray);
 
     InitializeGlobalIdDetails(&gGamesTable, pGlobalIdDetails, &GlobalIdData);
     PerformMultiThreadRecording(pGlobalIdDetails, &GlobalIdData);
@@ -731,6 +986,8 @@ main()
         printf("Pointer is null\n");
     }
 
+    //printf("%u\n", PerfectScoreSize);
+
     /*CombineIntoString(
             pAllDataCombined,
             &gGamesTable,
@@ -745,8 +1002,130 @@ main()
     PerformMultiThreadCombiner(pAllDataCombined, PerfectScoreSize,
             pGlobalIdDetails, &GlobalIdData);
 
-    printf("%s\n", pAllDataCombined[0].sData);
+    free(gGamesTable.Data);
+    free(gCategoryTable.Data);
+    free(gGenreTable.Data);
+    free(gSummaryTable.Data);
+    free(gOtherTable.Data);
+
+    //printf("%s\n", pAllDataCombined[0].sData);
     // printf("%llu\n", sizeof(pAllDataCombined[1].sData));
+
+    struct u16_array * BPETestingEnvironment = (u16_array *) malloc(
+            PerfectScoreSize * sizeof(u16_array));
+
+    InitializeTestingEnvironmentSequence(pAllDataCombined,
+            BPETestingEnvironment, PerfectScoreSize);
+
+    u32 CounterNonCompressed = 0;
+    for (u32  i = 0; i < 1024; i++)
+    {
+        if (BPETestingEnvironment[100].uaSequence[i] == 0)
+        {
+            break;
+        }
+        CounterNonCompressed++;
+    }
+
+/*    for (u16 x = 0; x < 1024; x++)
+    {
+        printf("%u ", BPETestingEnvironment[0].uaSequence[x]);
+        if (x % 20 == 0)
+        {
+            printf("\n");
+        }
+    }*/
+
+    u16 DictionarySize = 60000;
+    struct pair_occurence * VocabDictionary = (struct pair_occurence *) malloc(
+            DictionarySize * sizeof(pair_occurence));
+
+    u8 VocabSize = 50;
+    struct vocab * Vocabs = (struct vocab *) malloc(VocabSize * sizeof(vocab));
+
+    /*BPEImplementationProfiled(BPETestingEnvironment, VocabDictionary, DictionarySize,
+            PerfectScoreSize, Vocabs, VocabSize);*/
+    BPEImplementationMultiThreadProfiled(BPETestingEnvironment, VocabDictionary, DictionarySize,
+            PerfectScoreSize, Vocabs, VocabSize);
+
+    /*for (u16 x = 0; x < 1024; x++)
+    {
+        printf("%u ", BPETestingEnvironment[100].uaSequence[x]);
+        if (x % 20 == 0)
+        {
+            printf("\n");
+        }
+    }*/
+
+    /*u32 CounterCompressed = 0;
+    for (u32  i = 0; i < 1024; i++)
+    {
+        if (BPETestingEnvironment[100].uaSequence[i] == 0)
+        {
+            break;
+        }
+        CounterCompressed++;
+    }
+    for (u16 x = 0; x < DictionarySize; x++)
+    {
+        if (VocabDictionary[x].uaPairs[0] == 4 &&
+                VocabDictionary[x].uaPairs[1] == 0)
+        {
+            printf("First value: %u\n", VocabDictionary[x].uaPairs[0]);
+            printf("Second value: %u\n", VocabDictionary[x].uaPairs[1]);
+            printf("%u\n", VocabDictionary[x].uOccurence);
+            printf("%u\n", x);
+        }
+    }
+    printf("First value: %u\n", Vocabs[0].uaPairs[0]);
+    printf("Second value: %u\n", Vocabs[0].uaPairs[1]);
+    printf("Non Compressed value: %u\n", CounterNonCompressed);
+    printf("Compressed value: %u\n", CounterCompressed);
+    printf("Percentage of orignal length: %.2f%%\n", ((f64) CounterCompressed /
+            (f64) CounterNonCompressed) * 100);*/
+
+    bpe_array * CompressedArray = (bpe_array *) malloc(sizeof(bpe_array) *
+            PerfectScoreSize);
+    BPECompressionCopy(BPETestingEnvironment, CompressedArray,
+            PerfectScoreSize);
+
+    for (u16 x = 0; x < 512; x++)
+    {
+        printf("%d ", pAllDataCombined[1].sData[x]);
+        if (x % 20 == 0)
+        {
+            printf("\n");
+        }
+    }
+
+    free(pGlobalIdDetails);
+    free(pAllDataCombined);
+
+    for (u16 x = 0; x < 512; x++)
+    {
+        printf("%u ", BPETestingEnvironment[1].uaSequence[x]);
+        if (x % 20 == 0)
+        {
+            printf("\n");
+        }
+    }
+
+    /*for (u16 x = 0; x < 512; x++)
+    {
+        printf("%.1f ", CompressedArray[1].uaSequence[x]);
+        if (x % 20 == 0)
+        {
+            printf("\n");
+        }
+    }*/
+    for (u8 x = 0; x < 50; x++)
+    {
+        printf("%u\n", Vocabs[x].uPairID);
+        printf("%u\n", Vocabs[x].uaPairs[0]);
+        printf("%u\n", Vocabs[x].uaPairs[1]);
+    }
+
+    //free(CompressedArray);
 
     /*u64 CPUFREQ = estimate_cpu_timer_freq();
       f64 MultiThreadTimeGames = (f64) EndMultiThreadGames / (f64) CPUFREQ;
@@ -793,13 +1172,6 @@ main()
       printf("%u\n", gSummaryTable.uSizeArray);
       printf("%u\n", gOtherTable.uSizeArray);*/
 
-    free(gGamesTable.Data);
-    free(gCategoryTable.Data);
-    free(gGenreTable.Data);
-    free(gSummaryTable.Data);
-    free(gOtherTable.Data);
-    free(pGlobalIdDetails);
-    free(pAllDataCombined);
 
     return 0;
 }

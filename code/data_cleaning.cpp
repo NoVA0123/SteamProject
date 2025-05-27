@@ -228,11 +228,21 @@ CheckCategoryTableMultiThread(LPVOID lpParameter)
         Counter--;
     }
 
+    //printf("ThreadIndex: %u %u\n", Nexus ->ThreadIndex, StartIndex);
+    //printf("ThreadIndex: %u %u\n", Nexus ->ThreadIndex, EndIndex);
+    //printf("Counter value: %u\n", Counter);
+
     for (u32 x = StartIndex; x < EndIndex; x++)
     {
+        if (Counter > GlobalIdData -> uSize)
+        {
+            break;
+        }
+
         while (GlobalIdDetails[Counter].uID != CategoryTable -> Data[x].uID)
         {
             Counter++;
+            //printf("Counter value: %u\n", Counter);
 
             if (Counter > GlobalIdData -> uSize)
             {
@@ -320,6 +330,11 @@ CheckGenreTableMultiThread(LPVOID lpParameter)
 
     for (u32 x = StartIndex; x < EndIndex; x++)
     {
+        if (Counter > GlobalIdData -> uSize)
+        {
+            break;
+        }
+
         while (GlobalIdDetails[Counter].uID != GenreTable -> Data[x].uID)
         {
             Counter++;
@@ -412,6 +427,11 @@ CheckSummaryTableMultiThread(LPVOID lpParameter)
 
     for (u32 x = StartIndex; x < EndIndex; x++)
     {
+        if (Counter > GlobalIdData -> uSize)
+        {
+            break;
+        }
+
         while (GlobalIdDetails[Counter].uID != SummaryTable -> Data[x].uID)
         {
             Counter++;
@@ -516,6 +536,11 @@ CheckOtherTableMultiThread(LPVOID lpParameter
 
     for (u32 x = StartIndex; x < EndIndex; x++)
     {
+        if (Counter > GlobalIdData -> uSize)
+        {
+            break;
+        }
+
         while (GlobalIdDetails[Counter].uID != OtherTable -> Data[x].uID)
         {
             Counter++;

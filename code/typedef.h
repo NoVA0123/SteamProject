@@ -22,6 +22,7 @@ typedef int64_t s64;
 typedef int16_t s16;
 
 typedef double f64;
+typedef float f32;
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof(Array[0]))
 
