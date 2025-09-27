@@ -39,6 +39,15 @@ struct combiner_threads{
     u32 TotalRowsOfCombiner;
 };
 
+struct other_combiner_threads{
+    struct other * OtherTable;
+    struct combined * CombinedData;
+    u32 uStepSize;
+    u32 TotalRowsOfCombiner;
+    u8 Extra;
+    u8 TotalThreads;
+};
+
 void
 InitializeCombiner(struct combined *CombinedData,
         struct id_details *GlobalIdDetails, struct id_data *GlobalIdData);
@@ -47,6 +56,16 @@ void
 ThreadInitializerForCombiner(void * table, u8 TotalThreads,
         struct combined * CombinedData, u32 SizeArray,
         struct combiner_threads* Workers, u32 TotalRowsOfCombiner);
+
+struct other_combiner_threads
+SendDataForCombiner(struct other * OtherTable, struct combined * CombinedData,
+        u32 SizeArray, u32 TotalRowsOfCombiner, u8 TotalThreads);
+
+struct other_column *
+GetDataForCombiner();
+
+u32
+GetTotalRowsOfCombiner();
 
 DWORD WINAPI
 GameCombineMultiThread(LPVOID lpParameter);
@@ -60,7 +79,10 @@ GenreCombineMultiThread(LPVOID lpParameter);
 DWORD WINAPI
 SummaryCombineMultiThread(LPVOID lpParameter);
 
+/*DWORD WINAPI
+OtherCombineMultiThread(LPVOID lpParameter);*/
+
 DWORD WINAPI
-OtherCombineMultiThread(LPVOID lpParameter);
+OtherCombineMultiThreadTest(LPVOID lpParameter);
 
 #endif // !W__CODE_COMBINER_H_

@@ -13,7 +13,7 @@
 #include "typedef.h"
 
 struct bpe_array {
-   f32 uaSequence[512]; 
+   f32 faSequence[512]; 
    u32 uID;
 };
 

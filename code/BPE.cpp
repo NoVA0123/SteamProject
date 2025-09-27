@@ -42,7 +42,6 @@ InitializeTestingEnvironmentSequence(struct combined * CombinedData,
     }
 }
 
-
 void
 PairFinder(u16 * Pair, struct pair_occurence * VocabDictionary, u16 PairArraySize)
 {
@@ -179,7 +178,7 @@ LeftShift2ByteArray(u16 * Array, u16 Index, u16 ArraySize)
         }
     }
 
-    Array[ArraySize] = '\0';
+    Array[ArraySize - 1] = '\0';
 }
 
 void
@@ -197,7 +196,7 @@ SequenceCompression(struct vocab *Vocab, u16 * Sequence)
             Sequence[x + 1] = 7;
             
             StartLeftShift = read_cpu_timer();
-            LeftShift2ByteArray(Sequence, x+1, 1024);
+            LeftShift2ByteArray(Sequence, x, 1024);
             EndLeftShift = read_cpu_timer() - StartLeftShift;
             LeftShift += EndLeftShift;
         }
@@ -547,7 +546,7 @@ SmallSequenceCompressionCopy(struct u16_array * TestingEnvironment,
     for (u32 x = 0; x < BPEEnvironmentArraySize; x++)
     {
         SmallSequenceCopyUsingSimd(TestingEnvironment[x].uaSequence, 512,
-                CompressedArray[x].uaSequence);
+                CompressedArray[x].faSequence);
     }
 }
 
@@ -580,8 +579,11 @@ SmallSequenceCompressionCopyMultiThread(LPVOID lpParameter)
 
     for (u32 x = StartIndex; x < EndIndex; x++)
     {
-        SmallSequenceCopyUsingSimd(Parameters -> TestingEnvironment[x].uaSequence, 512,
-                Parameters -> CompressedArray[x].uaSequence);
+        Parameters -> CompressedArray[x].uID = Parameters ->
+            TestingEnvironment[x].uID;
+        SmallSequenceCopyUsingSimd(
+                Parameters -> TestingEnvironment[x].uaSequence, 512,
+                Parameters -> CompressedArray[x].faSequence);
     }
 
     return 0;

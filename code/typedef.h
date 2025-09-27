@@ -11,6 +11,7 @@
 #define W__CODE_TYPEDEF_H_
 
 #include <stdint.h>
+#include <windows.h>
 
 
 typedef uint8_t u8;

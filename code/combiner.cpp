@@ -10,13 +10,44 @@
 #include "csv_parser.h"
 #include "data_cleaning.h"
 #include "typedef.h"
+#include <cguid.h>
 #include <math.h>
 #include <stdio.h>
+#include <synchapi.h>
 #include <windows.h>
+
 
 void
 CopyTheStringInCombiner(char *CombineBuffer, char *DataBuffer, u16 Size)
 {
+    u16 Index = 0;
+    for (u16 x = 0; x < 1024; x++)
+    {
+        if (CombineBuffer[x] == '\0')
+        {
+            CombineBuffer[x] = ' ';
+            for (u16 i = 0; i < Size; i++)
+            {
+                if (DataBuffer[i] == '\0')
+                {
+                    Index = i + 1;
+                    break;
+                }
+                CombineBuffer[x + i + 1] = DataBuffer[i];
+            }
+            CombineBuffer[x + Index] = '\0';
+            break;
+        }
+    }
+}
+
+void
+SpecialCopyTheStringInCombiner(char *CombineBuffer, char *DataBuffer, u16 Size, u32 UID)
+{
+    if (UID == 3146340)
+    {
+        printf("%s\n", DataBuffer);
+    }
     u16 Index = 0;
     for (u16 x = 0; x < 1024; x++)
     {
@@ -400,7 +431,7 @@ OtherCombine(combined *CombinedData, struct other *OtherTable,
         CopyTheStringInCombiner(
                 CombinedData[CounterForCombiner].sData,
                 OtherTable->Data[x].sPublisher,
-                sizeof(OtherTable->Data[x].sDeveloper));
+                sizeof(OtherTable->Data[x].sPublisher));
 
         ConvertFloatIntoString(
                 CombinedData[CounterForCombiner].sData,
@@ -409,7 +440,7 @@ OtherCombine(combined *CombinedData, struct other *OtherTable,
         CopyTheStringInCombiner(
                 CombinedData[CounterForCombiner].sData,
                 OtherTable->Data[x].sLanguage,
-                sizeof(OtherTable->Data[x].sDeveloper));
+                sizeof(OtherTable->Data[x].sLanguage));
     }
 }
 
@@ -628,7 +659,8 @@ GenreCombineMultiThread(LPVOID lpParameter)
     }
 
     for (u16 x = 0; x < 1023; x++) {
-        if (CombinedData[CounterForCombiner].uID == GenreTable->Data[StartIndex].uID) {
+        if (CombinedData[CounterForCombiner].uID == GenreTable->Data[StartIndex].uID)
+        {
             break;
         }
         CounterForCombiner--;
@@ -671,6 +703,7 @@ SummaryCombineMultiThread(LPVOID lpParameter)
 
     u32 CounterForCombiner = 0;
     u8 CounterSwitch = 0;
+    u8 BreakOuterLoop = 0;
 
     u32 StartIndex = Workers -> uStepSize * Workers -> ThreadIndex;
     u32 EndIndex = StartIndex + Workers -> uStepSize + Workers -> Extra;
@@ -710,8 +743,14 @@ SummaryCombineMultiThread(LPVOID lpParameter)
 
             if (CounterForCombiner > Workers -> TotalRowsOfCombiner)
             {
+                BreakOuterLoop = 1;
                 break;
             }
+        }
+
+        if (BreakOuterLoop)
+        {
+            break;
         }
 
         if (CounterSwitch < 1)
@@ -728,8 +767,9 @@ SummaryCombineMultiThread(LPVOID lpParameter)
     return 0;
 }
 
+// Works on O3 but not on O0
 DWORD WINAPI
-OtherCombineMultiThread(LPVOID lpParameter)
+OtherCombineMultiThreadRandomWork(LPVOID lpParameter)
 {
     struct combiner_threads * Workers = (struct combiner_threads *)
         lpParameter;
@@ -739,9 +779,11 @@ OtherCombineMultiThread(LPVOID lpParameter)
 
     u32 CounterForCombiner = 0;
     u8 CounterSwitch = 0;
+    u8 BreakOuterLoop = 0;
 
     u32 StartIndex = Workers -> uStepSize * Workers -> ThreadIndex;
     u32 EndIndex = StartIndex + Workers -> uStepSize + Workers -> Extra;
+    u32 SizeArray = OtherTable ->uSizeArray;
 
     while (CombinedData[CounterForCombiner].uID >
             OtherTable -> Data[StartIndex].uID)
@@ -775,11 +817,18 @@ OtherCombineMultiThread(LPVOID lpParameter)
                 CombinedData[CounterForCombiner].uID)
         {
             CounterForCombiner++;
+            CounterSwitch = 0;
 
-            if (CounterForCombiner > Workers -> TotalRowsOfCombiner)
+            if (CounterForCombiner >= Workers -> TotalRowsOfCombiner)
             {
+                BreakOuterLoop = 1;
                 break;
             }
+        }
+
+        if (BreakOuterLoop)
+        {
+            break;
         }
 
         CopyTheStringInCombiner(
@@ -790,7 +839,7 @@ OtherCombineMultiThread(LPVOID lpParameter)
         CopyTheStringInCombiner(
                 CombinedData[CounterForCombiner].sData,
                 OtherTable->Data[x].sPublisher,
-                sizeof(OtherTable->Data[x].sDeveloper));
+                sizeof(OtherTable->Data[x].sPublisher));
 
         ConvertFloatIntoString(
                 CombinedData[CounterForCombiner].sData,
@@ -799,7 +848,60 @@ OtherCombineMultiThread(LPVOID lpParameter)
         CopyTheStringInCombiner(
                 CombinedData[CounterForCombiner].sData,
                 OtherTable->Data[x].sLanguage,
-                sizeof(OtherTable->Data[x].sDeveloper));
+                sizeof(OtherTable->Data[x].sLanguage));
+
+    }
+    return 0;
+}
+
+DWORD WINAPI
+OtherCombineMultiThreadTest(LPVOID lpParameter)
+{
+    combined * CombinedData = (combined *) lpParameter;
+    other_column * Data = GetDataForCombiner();
+    u32 CounterForCombiner = 0;
+    u32 TotalRowsOfCombiner = GetTotalRowsOfCombiner();
+    u8 OuterBreak = 0;
+
+    while (Data != NULL)
+    {
+        while (Data -> uID >
+                CombinedData[CounterForCombiner].uID)
+        {
+            CounterForCombiner++;
+
+            if (CounterForCombiner >= TotalRowsOfCombiner)
+            {
+                OuterBreak = 1;
+                break;
+            }
+        }
+
+        if (OuterBreak)
+        {
+            break;
+        }
+
+        CopyTheStringInCombiner(
+                CombinedData[CounterForCombiner].sData,
+                Data -> sDeveloper,
+                sizeof(Data -> sDeveloper));
+
+        CopyTheStringInCombiner(
+                CombinedData[CounterForCombiner].sData,
+                Data -> sPublisher,
+                sizeof(Data -> sPublisher));
+
+        ConvertFloatIntoString(
+                CombinedData[CounterForCombiner].sData,
+                (u64) (Data -> fPrice * 100));
+
+        CopyTheStringInCombiner(
+                CombinedData[CounterForCombiner].sData,
+                Data -> sLanguage,
+                sizeof(Data -> sLanguage));
+
+        Data = GetDataForCombiner();
     }
     return 0;
 }
